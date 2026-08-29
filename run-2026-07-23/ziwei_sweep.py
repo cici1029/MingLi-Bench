@@ -18,6 +18,25 @@ ORDER = ["命宫", "兄弟", "夫妻", "子女", "财帛", "疾厄", "迁移", "
 DOMAIN = {"命宫": "自身", "兄弟": "六亲", "夫妻": "婚恋", "子女": "子女", "财帛": "财务", "疾厄": "健康",
           "迁移": "迁徙", "仆役": "人际", "官禄": "事业", "田宅": "家宅", "福德": "心境", "父母": "六亲"}
 
+# ==== v1.2 (2026-08-29): 三合派流曜 + 岁前诸星 ====
+# 安星表全部经 iztro horoscope API 逐干逐支采集验证 (甲子..癸酉 十年全采);
+# 应期规则源: wiki ziwei/techniques/流年应期诸星 (王亭之岁前十二神 + 全书安星诀)
+LUCUN = {"甲": "寅", "乙": "卯", "丙": "巳", "丁": "午", "戊": "巳", "己": "午", "庚": "申", "辛": "酉", "壬": "亥", "癸": "子"}
+CHANG = {"甲": "巳", "乙": "午", "丙": "申", "丁": "酉", "戊": "申", "己": "酉", "庚": "亥", "辛": "子", "壬": "寅", "癸": "卯"}
+QU = {"甲": "酉", "乙": "申", "丙": "午", "丁": "巳", "戊": "午", "己": "巳", "庚": "卯", "辛": "寅", "壬": "子", "癸": "亥"}
+TRINE_MA = {z: m for zs, m in (("申子辰", "寅"), ("寅午戌", "申"), ("巳酉丑", "亥"), ("亥卯未", "巳")) for z in zs}
+XIANCHI = {z: m for zs, m in (("申子辰", "酉"), ("寅午戌", "卯"), ("巳酉丑", "午"), ("亥卯未", "子")) for z in zs}
+SUIQIAN = {"丧门": 2, "官符": 4, "大耗": 6, "白虎": 8, "吊客": 10}  # 岁建+offset; 病符属流月日层不收
+SHA_STARS = {"擎羊", "陀罗", "火星", "铃星"}
+
+def flow_positions(fg, fz):
+    """流年干支 → 流曜落支表 (selftest 对 iztro 采集值回归)"""
+    lu = LUCUN[fg]; li = ZHI.index(lu)
+    luan = ZHI[(3 - ZHI.index(fz)) % 12]
+    return {"流禄": lu, "流羊": ZHI[(li + 1) % 12], "流陀": ZHI[(li - 1) % 12],
+            "流昌": CHANG[fg], "流曲": QU[fg], "流马": TRINE_MA[fz],
+            "流鸾": luan, "流喜": ZHI[(ZHI.index(luan) + 6) % 12], "咸池": XIANCHI[fz]}
+
 def jiazi(i): return GAN[i % 10] + ZHI[i % 12]
 def liunian_gz(year): return jiazi((year - 1984) % 60)
 
@@ -115,6 +134,48 @@ def sweep_year(ch, y, birth_year):
     mp = ch.adj_palace("天马")
     if mp and (mp["branch"] == fz or mp["branch"] == p1["branch"]):
         ev.append((f"太岁动天马({mp['name']})", 2.0, "迁移"))
+    # ==== v1.2 三合派流曜 + 岁前诸星 (单星临宫只算候选, 煞忌接应才计重) ====
+    fp = flow_positions(fg, fz)
+    birth_ji = SIHUA[ch.year_stem][3]
+    def sha_hit(p):  # 煞忌接应: 本命煞曜 / 天刑 / 生年忌星坐宫
+        return bool(SHA_STARS & set(p["stars"])) or "天刑" in p.get("adj", []) or birth_ji in p["stars"]
+    # 8 岁前诸星按落宫 + 接应计分
+    for star, off in SUIQIAN.items():
+        sp = ch.by_branch[ZHI[(ZHI.index(fz) + off) % 12]]
+        if star == "官符" and sha_hit(sp):
+            ev.append((f"岁前官符落{sp['name']}(煞忌接应)", 2.5, "官非"))
+            if sp["branch"] in (fp["流羊"], fp["流陀"]):
+                ev.append(("流羊陀会官符", 1.0, "官非"))
+        elif star in ("丧门", "白虎", "吊客") and sp["name"] in ("父母", "兄弟") and sha_hit(sp):
+            ev.append((f"岁前{star}落{sp['name']}(煞忌接应)", 2.0, sp["name"]))
+        elif star == "大耗" and sp["name"] in ("财帛", "田宅"):
+            w = 2.0 + (1.5 if ("武曲" in sp["stars"] and {"火星", "铃星"} & set(sp["stars"])) else 0.0)
+            ev.append((f"岁前大耗落{sp['name']}", w, sp["name"]))
+    # 9 流曜按落宫计分
+    p_lu = ch.by_branch[fp["流禄"]]
+    ev.append((f"流禄入{p_lu['name']}", 1.5, p_lu["name"]))
+    for yt in ("流羊", "流陀"):
+        pt = ch.by_branch[fp[yt]]
+        if pt["name"] in ("命宫", "官禄", "迁移"):
+            ev.append((f"{yt}入{pt['name']}", 1.5, "官非"))
+    for wt in ("流昌", "流曲"):
+        pt = ch.by_branch[fp[wt]]
+        if pt["name"] in ("命宫", "官禄", "父母"):
+            ev.append((f"{wt}入{pt['name']}(文书)", 1.5, pt["name"]))
+    pm = ch.by_branch[fp["流马"]]
+    if pm["name"] in ("命宫", "迁移"):
+        ev.append((f"流马入{pm['name']}", 2.0, "迁徙"))
+    # 10 桃花应期: 流鸾流喜落夫妻/流命; 本命天姚/咸池宫被太岁引动
+    for hx in ("流鸾", "流喜"):
+        pt = ch.by_branch[fp[hx]]
+        if pt["name"] == "夫妻" or pt["branch"] == fz:
+            ev.append((f"{hx}落{pt['name']}", 2.0, "夫妻"))
+    pxc = ch.by_branch[fp["咸池"]]
+    if pxc["name"] in ("夫妻", "命宫"):
+        ev.append((f"流年咸池落{pxc['name']}", 1.5, "夫妻"))
+    tyao = ch.adj_palace("天姚")
+    if tyao and tyao["branch"] == fz:
+        ev.append((f"太岁引动天姚({tyao['name']})", 1.5, "夫妻"))
     # 7 流年宫位旋转: 流X宫落在持生年忌/流忌的本命宫 → 该域被压
     fi = ZHI.index(fz)
     for pn in ch.palaces:
@@ -188,6 +249,16 @@ def selftest():
     gz28, ev28 = sweep_year(ch, 2028, 1991)  # 戊申年, 申=案A夫妻宫
     assert gz28 == "戊申", gz28
     assert any("太岁入夫妻" in e[0] for e in ev28), ev28
+    # v1.2 流曜安星回归: 辛丑行对 iztro 采集值 (2026-08-29 harvest)
+    fp = flow_positions("辛", "丑")
+    assert fp == {"流禄": "酉", "流羊": "戌", "流陀": "申", "流昌": "子", "流曲": "寅",
+                  "流马": "亥", "流鸾": "寅", "流喜": "申", "咸池": "午"}, fp
+    fp84 = flow_positions("甲", "子")
+    assert (fp84["流禄"], fp84["流昌"], fp84["流曲"], fp84["流鸾"]) == ("寅", "巳", "酉", "卯"), fp84
+    # 2021 辛丑 on 案A: 流喜申落夫妻宫应有桃花候选; 官符落巳(疾厄)无煞忌接应, 不得出官非事件
+    gz21, ev21 = sweep_year(ch, 2021, 1991)
+    assert any("流喜落夫妻" in e[0] for e in ev21), ev21
+    assert not any("官符" in e[0] for e in ev21), ev21
     print("selftest OK")
 
 def main():

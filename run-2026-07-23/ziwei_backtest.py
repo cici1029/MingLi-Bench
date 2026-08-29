@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # 锚点域 → 可接受的 sweep 域集合 (学业=官禄主+父母文书; 官非=是非缠身/自身)
 ACCEPT = {"婚恋": {"婚恋"}, "事业": {"事业"}, "学业": {"事业", "六亲"}, "生育": {"子女"},
           "六亲": {"六亲"}, "家宅": {"家宅"}, "财务": {"财务"}, "健康": {"健康"},
-          "官非": {"事业", "自身"}, "迁徙": {"迁徙"}, "人际": {"人际"}}
+          "官非": {"官非", "事业", "自身"}, "迁徙": {"迁徙"}, "人际": {"人际"}}
 
 def gen_chart(date, time_index, gender):
     out = subprocess.run(["node", os.path.join(HERE, "ziwei_gen.js"), "--date", date,
