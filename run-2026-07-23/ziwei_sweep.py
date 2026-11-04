@@ -54,8 +54,10 @@ class Chart:
         return None
 
     def adj_palace(self, star):  # 杂曜定位 (红鸾/天喜/天马等)
+        # iztro files 天马 under minorStars ("stars"), 红鸾/天喜/天姚/天刑 under adjectiveStars ("adj").
+        # Search both, or the 天马 rule never fires (dead code 2026-08-29 to 2026-11-04).
         for p in self.palaces:
-            if star in p.get("adj", []): return p
+            if star in p.get("adj", []) or star in p["stars"]: return p
         return None
 
     def sanfang_branches(self, branch):  # 三方四正: 本/对/两三合
@@ -259,6 +261,9 @@ def selftest():
     gz21, ev21 = sweep_year(ch, 2021, 1991)
     assert any("流喜落夫妻" in e[0] for e in ev21), ev21
     assert not any("官符" in e[0] for e in ev21), ev21
+    # 天马 lives in "stars" (iztro minorStars); 2025 乙巳 太岁 sits on 案A 天马 (疾厄 巳) and must fire
+    gz25, ev25 = sweep_year(ch, 2025, 1991)
+    assert any("太岁动天马(疾厄)" in e[0] for e in ev25), ev25
     print("selftest OK")
 
 def main():
