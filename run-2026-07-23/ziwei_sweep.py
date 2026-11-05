@@ -45,6 +45,9 @@ class Chart:
         self.palaces = d["palaces"]
         self.year_stem = d["year_stem"]
         self.decadal = d["decadal"]
+        # lunar birth year (iztro). 虚岁 counts from the lunar year, so births before Lunar New Year
+        # (e.g. 1984-01-24 = 癸亥 1983) would shift every 大限 by one year if the Gregorian year were used.
+        self.lunar_year = d.get("lunar_year")
         self.by_branch = {p["branch"]: p for p in self.palaces}
         self.by_name = {p["name"]: p for p in self.palaces}
 
@@ -112,7 +115,7 @@ def sweep_year(ch, y, birth_year):
     if ch.self_ji(p0):
         ev.append((f"太岁引动{p0['name']}自化忌", 2.0, p0["name"]))
     # 6 大限四化 (限忌/限禄入宫; 限流双忌叠)
-    xusui = y - birth_year + 1
+    xusui = y - (ch.lunar_year or birth_year) + 1
     dc = ch.decadal_at(xusui)
     if dc:
         ds = SIHUA[dc["stem"]]

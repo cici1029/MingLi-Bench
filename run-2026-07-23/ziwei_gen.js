@@ -43,6 +43,7 @@ const decadal = h.palaces.map((p) => ({
 
 console.log(JSON.stringify({
   year_stem: h.chineseDate[0],
+  lunar_year: h.rawDates.lunarDate.lunarYear, // 虚岁 base; differs from Gregorian year for births before Lunar New Year
   year_branch: h.chineseDate[1],
   palaces,
   decadal,
